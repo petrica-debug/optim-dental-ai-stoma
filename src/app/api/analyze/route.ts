@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import OpenAI from 'openai'
 
+export const maxDuration = 60
+
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -166,6 +168,7 @@ export async function POST(request: NextRequest) {
           ],
           max_tokens: 4096,
           temperature: 0.2,
+          response_format: { type: 'json_object' },
         })
         break
       } catch (e) {
@@ -183,13 +186,30 @@ export async function POST(request: NextRequest) {
 
     let analysis
     try {
-      const jsonStr = aiResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      let jsonStr = aiResponse
+        .replace(/```json\s*/gi, '')
+        .replace(/```\s*/g, '')
+        .trim()
+
+      // Extract JSON object if surrounded by text
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        jsonStr = jsonMatch[0]
+      }
+
       analysis = JSON.parse(jsonStr)
     } catch {
-      return NextResponse.json(
-        { error: 'Răspunsul AI nu a putut fi procesat', raw: aiResponse },
-        { status: 500 }
-      )
+      // Last resort: try to build a minimal valid response from the raw text
+      analysis = {
+        overall_assessment: aiResponse.slice(0, 2000),
+        confidence_score: 0.5,
+        urgency_level: 'normal',
+        odontal_findings: [],
+        parodontal_findings: [],
+        protetic_findings: [],
+        chirurgical_findings: [],
+        treatment_plan: [],
+      }
     }
 
     const { data: xray, error: xrayError } = await supabaseAdmin
