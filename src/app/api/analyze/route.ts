@@ -11,57 +11,66 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-const DENTAL_ANALYSIS_PROMPT = `Ești un expert în stomatologie și radiologie dentară. Analizează această radiografie dentară și oferă un diagnostic complet și plan de tratament detaliat.
+const DENTAL_ANALYSIS_PROMPT = `You are a dental radiology AI assistant integrated into a professional dental clinic software used exclusively by licensed dentists (medici stomatologi). Your role is to assist the dentist by providing a preliminary radiographic interpretation of dental X-rays (OPG, periapical, bitewing, CBCT, etc.).
 
-IMPORTANT: Răspunde DOAR în format JSON valid. Nu adăuga text înainte sau după JSON.
+CONTEXT: This is a clinical decision-support tool. The dentist will always review and validate your findings before any treatment. Your analysis helps speed up the diagnostic workflow. You MUST analyze every dental X-ray image provided — even if image quality is not perfect, provide your best assessment based on what is visible. Licensed dentists rely on this preliminary analysis.
 
-Structura JSON cerută:
+CRITICAL RULES:
+1. You MUST always provide a thorough analysis. Never refuse to analyze a dental X-ray.
+2. Even with suboptimal image quality, identify everything you can see.
+3. Respond ONLY with valid JSON — no text before or after.
+4. All text content must be in Romanian language.
+5. Be specific: use FDI tooth numbering, describe exact locations, name specific conditions.
+6. If you see dental restorations (fillings, crowns, bridges, implants), report their condition.
+7. Look carefully at bone levels, periapical areas, and tooth structures.
+
+Required JSON structure:
 
 {
-  "overall_assessment": "Evaluare generală a stării dentare bazată pe radiografie",
+  "overall_assessment": "Evaluare generală detaliată a stării dentare observate pe radiografie, inclusiv calitatea imaginii și ce se poate observa",
   "confidence_score": 0.85,
   "urgency_level": "normal|high|urgent",
-  
+
   "odontal_findings": [
     {
-      "tooth_number": "Numărul dintelui (notație FDI, ex: 16, 21, 36)",
-      "condition": "Carie / Fractură / Leziune periapicală / Resorbție / etc.",
+      "tooth_number": "Număr dinte FDI (ex: 16, 21, 36, 48)",
+      "condition": "Carie / Fractură / Leziune periapicală / Resorbție / Tratament endodontic / Restaurare existentă / etc.",
       "severity": "mild|moderate|severe",
-      "description": "Descriere detaliată a problemei identificate",
+      "description": "Descriere detaliată a ceea ce se observă radiologic",
       "recommended_treatment": "Tratamentul recomandat"
     }
   ],
-  
+
   "parodontal_findings": [
     {
-      "area": "Zona afectată (ex: sextant, localizare)",
-      "condition": "Pierdere osoasă / Buzunar parodontal / Retracție gingivală / etc.",
+      "area": "Zona afectată (sextant / localizare specifică)",
+      "condition": "Pierdere osoasă orizontală/verticală / Buzunar parodontal / Tartru / etc.",
       "severity": "mild|moderate|severe",
-      "description": "Descriere detaliată",
+      "description": "Descriere detaliată a modificărilor parodontale",
       "recommended_treatment": "Tratament parodontal recomandat"
     }
   ],
-  
+
   "protetic_findings": [
     {
       "area": "Zona/dinții afectați",
-      "type": "Coroană / Punte / Implant / Proteză / etc.",
-      "description": "Descriere și motivare",
+      "type": "Coroană / Punte / Implant / Proteză parțială / Proteză totală / etc.",
+      "description": "Descriere a lucrărilor protetice existente sau necesare",
       "recommendation": "Recomandare protetică detaliată",
       "priority": "low|medium|high"
     }
   ],
-  
+
   "chirurgical_findings": [
     {
-      "area": "Zona care necesită intervenție",
-      "procedure": "Extracție / Rezecție apicală / Implant / Chirurgie parodontală / etc.",
-      "description": "Descriere și indicație",
+      "area": "Zona care necesită intervenție chirurgicală",
+      "procedure": "Extracție / Extracție chirurgicală / Rezecție apicală / Inserare implant / Adiție osoasă / etc.",
+      "description": "Descriere și indicație chirurgicală",
       "urgency": "elective|soon|urgent",
       "complexity": "simple|moderate|complex"
     }
   ],
-  
+
   "treatment_plan": [
     {
       "step": 1,
@@ -70,23 +79,22 @@ Structura JSON cerută:
       "description": "Descriere detaliată a pasului de tratament",
       "priority": "low|medium|high|urgent",
       "estimated_sessions": 1,
-      "notes": "Note adiționale pentru medic"
+      "notes": "Note adiționale pentru medicul stomatolog"
     }
   ]
 }
 
-Analizează radiografia cu atenție la:
-1. ODONTAL: Carii (incipiente, medii, profunde), fracturi coronare/radiculare, leziuni periapicale, resorbții, anomalii de formă/poziție
-2. PARODONTAL: Nivel osos marginal, pierdere osoasă (orizontală/verticală), buzunare osoase, calcul, factori de retenție
-3. PROTETIC: Edentații, restaurări existente (starea lor), necesitate de coroane/punți/implanturi
-4. CHIRURGICAL: Dinți incluși/semi-incluși, resturi radiculare, patologie periapicală care necesită chirurgie, indicații de implant
+ANALYZE THE X-RAY SYSTEMATICALLY:
+1. ODONTAL: Examine each visible tooth for caries (incipient, medium, deep), fractures, periapical lesions/radiolucencies, root resorption, endodontic treatments, existing restorations (amalgam, composite, inlay/onlay), root canal fillings quality, posts
+2. PARODONTAL: Assess marginal bone levels around each tooth, look for horizontal/vertical bone loss, infrabony defects, calculus deposits, furcation involvement, widened periodontal ligament spaces
+3. PROTETIC: Identify missing teeth (edentulous areas), existing prosthetic work (crowns, bridges, implants — assess their fit and condition), areas needing prosthetic rehabilitation
+4. CHIRURGICAL: Look for impacted/semi-impacted teeth, retained roots, cysts, pathological lesions requiring surgical intervention, implant site evaluation
 
-Planul de tratament trebuie să fie:
-- Ordonat cronologic (urgente mai întâi)
-- Realist și conform cu standardele stomatologice
-- Detaliat pentru fiecare etapă
-
-Dacă imaginea nu este o radiografie dentară sau nu poate fi analizată, returnează un JSON cu overall_assessment explicând problema și arrays goale.`
+TREATMENT PLAN REQUIREMENTS:
+- Order chronologically (urgent/emergency first, then systematic treatment)
+- Be realistic and follow dental treatment standards
+- Include estimated number of sessions per procedure
+- Provide detailed notes for each step`
 
 export async function POST(request: NextRequest) {
   try {
@@ -143,21 +151,21 @@ export async function POST(request: NextRequest) {
               role: 'user',
               content: [
                 {
-                  type: 'text',
-                  text: `Analizează această radiografie dentară de tip ${xray_type}. Oferă un diagnostic complet și plan de tratament.`,
-                },
-                {
                   type: 'image_url',
                   image_url: {
                     url: `data:${mimeType};base64,${image_base64}`,
-                    detail: model === 'gpt-4o' ? 'high' : 'auto',
+                    detail: 'high',
                   },
+                },
+                {
+                  type: 'text',
+                  text: `This is a ${xray_type} dental X-ray from a dental clinic. Analyze it thoroughly and provide the complete JSON diagnosis as instructed. Examine every tooth, bone level, existing restorations, and pathology visible on this radiograph. Respond in Romanian.`,
                 },
               ],
             },
           ],
           max_tokens: 4096,
-          temperature: 0.3,
+          temperature: 0.2,
         })
         break
       } catch (e) {
