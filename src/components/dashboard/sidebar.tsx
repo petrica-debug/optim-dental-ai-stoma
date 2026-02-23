@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Users,
   Upload,
+  FileText,
   LogOut,
   Menu,
   X,
@@ -19,6 +20,7 @@ const navItems = [
   { href: '/dashboard', label: 'Panou principal', icon: LayoutDashboard },
   { href: '/patients', label: 'Pacienți', icon: Users },
   { href: '/upload', label: 'Analiză nouă', icon: Upload },
+  { href: '/analize', label: 'Analize AI', icon: FileText },
 ]
 
 export function Sidebar() {
@@ -50,7 +52,8 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1">
         {navItems.map((item) => {
           const isActive =
-            pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+            pathname === item.href ||
+            (item.href !== '/dashboard' && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}
@@ -63,7 +66,9 @@ export function Sidebar() {
                   : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               )}
             >
-              <item.icon className={cn('h-5 w-5', isActive ? 'text-blue-600' : 'text-gray-400')} />
+              <item.icon
+                className={cn('h-5 w-5', isActive ? 'text-blue-600' : 'text-gray-400')}
+              />
               {item.label}
             </Link>
           )
@@ -102,10 +107,7 @@ export function Sidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        <button
-          onClick={() => setMobileOpen(false)}
-          className="absolute top-4 right-4 lg:hidden"
-        >
+        <button onClick={() => setMobileOpen(false)} className="absolute top-4 right-4 lg:hidden">
           <X className="h-5 w-5 text-gray-500" />
         </button>
         {navContent}

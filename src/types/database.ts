@@ -1,102 +1,120 @@
-export interface Profile {
+export interface Clinic {
   id: string
-  full_name: string
-  clinic_name: string | null
-  specialization: string | null
+  name: string
+  address: string | null
+  city: string | null
+  county: string | null
   phone: string | null
-  avatar_url: string | null
+  email: string | null
+  cui: string | null
   created_at: string
-  updated_at: string
+}
+
+export interface Doctor {
+  id: string
+  user_id: string
+  clinic_id: string | null
+  first_name: string
+  last_name: string
+  specialization: string | null
+  license_number: string | null
+  created_at: string
 }
 
 export interface Patient {
   id: string
+  clinic_id: string | null
   doctor_id: string
-  full_name: string
+  first_name: string
+  last_name: string
   date_of_birth: string | null
   phone: string | null
   email: string | null
-  medical_history: string | null
   allergies: string | null
+  medical_history: string | null
   notes: string | null
   created_at: string
   updated_at: string
 }
 
-export interface XrayUpload {
+export interface Xray {
   id: string
   patient_id: string
   doctor_id: string
+  clinic_id: string | null
   file_url: string
-  file_name: string
+  file_name: string | null
   xray_type: string
   notes: string | null
-  created_at: string
+  upload_date: string
 }
 
-export interface Diagnosis {
+export interface AiAnalysis {
   id: string
   xray_id: string
-  patient_id: string
   doctor_id: string
-  overall_assessment: string | null
+  detection_results: Record<string, unknown> | null
+  annotated_image_url: string | null
+  diagnostic_summary: string | null
+  findings: ToothFinding[] | null
+  plan_odontal: TreatmentSection | null
+  plan_parodontal: TreatmentSection | null
+  plan_protetic: TreatmentSection | null
+  plan_chirurgical: TreatmentSection | null
+  plan_endodontic: TreatmentSection | null
+  plan_ortodontic: TreatmentSection | null
+  treatment_priority: Prioritization | null
+  estimated_sessions: number | null
+  recommendations: string[] | null
   confidence_score: number | null
-  odontal_findings: OdontalFinding[]
-  parodontal_findings: ParodontalFinding[]
-  protetic_findings: ProteticFinding[]
-  chirurgical_findings: ChirurgicalFinding[]
-  treatment_plan: TreatmentStep[]
-  urgency_level: string
-  raw_ai_response: Record<string, unknown> | null
-  doctor_approved: boolean
+  disclaimer: string
+  status: string
   doctor_notes: string | null
+  doctor_approved: boolean
   created_at: string
   updated_at: string
 }
 
-export interface OdontalFinding {
-  tooth_number: string
-  condition: string
-  severity: 'mild' | 'moderate' | 'severe'
-  description: string
-  recommended_treatment: string
+export interface DentalChart {
+  id: string
+  patient_id: string
+  analysis_id: string | null
+  tooth_number: number
+  condition: string | null
+  severity: string | null
+  notes: string | null
+  created_at: string
 }
 
-export interface ParodontalFinding {
-  area: string
-  condition: string
-  severity: 'mild' | 'moderate' | 'severe'
-  description: string
-  recommended_treatment: string
+export interface ToothFinding {
+  dinte: string
+  conditie: string
+  severitate: string
+  observatii: string
 }
 
-export interface ProteticFinding {
-  area: string
-  type: string
-  description: string
-  recommendation: string
-  priority: 'low' | 'medium' | 'high'
+export interface TreatmentItem {
+  dinte?: string
+  zona?: string
+  procedura: string
+  material_sugerat?: string
+  tip_lucrare?: string
+  indicatie?: string
+  urgenta?: string
+  frecventa?: string
+  nr_canale_estimat?: string
+  observatii?: string
 }
 
-export interface ChirurgicalFinding {
-  area: string
-  procedure: string
-  description: string
-  urgency: 'elective' | 'soon' | 'urgent'
-  complexity: 'simple' | 'moderate' | 'complex'
+export interface TreatmentSection {
+  titlu: string
+  diagnostic_parodontal?: string
+  tratamente: TreatmentItem[]
 }
 
-export interface TreatmentStep {
-  step: number
-  category: 'odontal' | 'parodontal' | 'protetic' | 'chirurgical'
-  procedure: string
-  description: string
-  priority: 'low' | 'medium' | 'high' | 'urgent'
-  estimated_sessions: number
-  notes: string
-}
-
-export interface DiagnosisWithRelations extends Diagnosis {
-  xray_uploads?: XrayUpload
-  patients?: Patient
+export interface Prioritization {
+  urgent: string[]
+  pe_termen_scurt: string[]
+  pe_termen_mediu: string[]
+  preventiv: string[]
 }

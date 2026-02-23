@@ -1,18 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Users, Plus, Search } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
+import { Users } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { formatDate, getInitials } from '@/lib/utils'
 import { AddPatientDialog } from '@/components/dashboard/add-patient-dialog'
 
 export default async function PatientsPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const { data: patients } = await supabase
@@ -40,31 +36,28 @@ export default async function PatientsPage() {
         </Card>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {patients.map((patient) => (
-            <Link key={patient.id} href={`/patients/${patient.id}`}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
-                <CardContent className="p-5">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-semibold text-sm shrink-0">
-                      {getInitials(patient.full_name)}
+          {patients.map((patient) => {
+            const fullName = `${patient.first_name} ${patient.last_name}`
+            return (
+              <Link key={patient.id} href={`/patients/${patient.id}`}>
+                <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
+                  <CardContent className="p-5">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-semibold text-sm shrink-0">
+                        {getInitials(fullName)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{fullName}</p>
+                        {patient.phone && <p className="text-sm text-gray-500 truncate">{patient.phone}</p>}
+                        {patient.email && <p className="text-sm text-gray-500 truncate">{patient.email}</p>}
+                        <p className="text-xs text-gray-400 mt-1">Adăugat: {formatDate(patient.created_at)}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <p className="font-semibold text-gray-900 truncate">{patient.full_name}</p>
-                      {patient.phone && (
-                        <p className="text-sm text-gray-500 truncate">{patient.phone}</p>
-                      )}
-                      {patient.email && (
-                        <p className="text-sm text-gray-500 truncate">{patient.email}</p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-1">
-                        Adăugat: {formatDate(patient.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>

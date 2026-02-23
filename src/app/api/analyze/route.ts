@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import OpenAI from 'openai'
+import { runAnalysisPipeline } from '@/lib/ai/analysis-pipeline'
 
 export const maxDuration = 60
 
@@ -8,95 +8,6 @@ const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-})
-
-const DENTAL_ANALYSIS_PROMPT = `You are a dental radiology AI assistant integrated into a professional dental clinic software used exclusively by licensed dentists (medici stomatologi). Your role is to assist the dentist by providing a preliminary radiographic interpretation of dental X-rays (OPG, periapical, bitewing, CBCT, etc.).
-
-CONTEXT: This is a clinical decision-support tool. The dentist will always review and validate your findings before any treatment. Your analysis helps speed up the diagnostic workflow. You MUST analyze every dental X-ray image provided — even if image quality is not perfect, provide your best assessment based on what is visible. Licensed dentists rely on this preliminary analysis.
-
-CRITICAL RULES:
-1. You MUST always provide a thorough analysis. Never refuse to analyze a dental X-ray.
-2. Even with suboptimal image quality, identify everything you can see.
-3. Respond ONLY with valid JSON — no text before or after.
-4. All text content must be in Romanian language.
-5. Be specific: use FDI tooth numbering, describe exact locations, name specific conditions.
-6. If you see dental restorations (fillings, crowns, bridges, implants), report their condition.
-7. Look carefully at bone levels, periapical areas, and tooth structures.
-
-Required JSON structure:
-
-{
-  "overall_assessment": "Evaluare generală detaliată a stării dentare observate pe radiografie, inclusiv calitatea imaginii și ce se poate observa",
-  "confidence_score": 0.85,
-  "urgency_level": "normal|high|urgent",
-
-  "odontal_findings": [
-    {
-      "tooth_number": "Număr dinte FDI (ex: 16, 21, 36, 48)",
-      "condition": "Carie / Fractură / Leziune periapicală / Resorbție / Tratament endodontic / Restaurare existentă / etc.",
-      "severity": "mild|moderate|severe",
-      "description": "Descriere detaliată a ceea ce se observă radiologic",
-      "recommended_treatment": "Tratamentul recomandat"
-    }
-  ],
-
-  "parodontal_findings": [
-    {
-      "area": "Zona afectată (sextant / localizare specifică)",
-      "condition": "Pierdere osoasă orizontală/verticală / Buzunar parodontal / Tartru / etc.",
-      "severity": "mild|moderate|severe",
-      "description": "Descriere detaliată a modificărilor parodontale",
-      "recommended_treatment": "Tratament parodontal recomandat"
-    }
-  ],
-
-  "protetic_findings": [
-    {
-      "area": "Zona/dinții afectați",
-      "type": "Coroană / Punte / Implant / Proteză parțială / Proteză totală / etc.",
-      "description": "Descriere a lucrărilor protetice existente sau necesare",
-      "recommendation": "Recomandare protetică detaliată",
-      "priority": "low|medium|high"
-    }
-  ],
-
-  "chirurgical_findings": [
-    {
-      "area": "Zona care necesită intervenție chirurgicală",
-      "procedure": "Extracție / Extracție chirurgicală / Rezecție apicală / Inserare implant / Adiție osoasă / etc.",
-      "description": "Descriere și indicație chirurgicală",
-      "urgency": "elective|soon|urgent",
-      "complexity": "simple|moderate|complex"
-    }
-  ],
-
-  "treatment_plan": [
-    {
-      "step": 1,
-      "category": "odontal|parodontal|protetic|chirurgical",
-      "procedure": "Numele procedurii",
-      "description": "Descriere detaliată a pasului de tratament",
-      "priority": "low|medium|high|urgent",
-      "estimated_sessions": 1,
-      "notes": "Note adiționale pentru medicul stomatolog"
-    }
-  ]
-}
-
-ANALYZE THE X-RAY SYSTEMATICALLY:
-1. ODONTAL: Examine each visible tooth for caries (incipient, medium, deep), fractures, periapical lesions/radiolucencies, root resorption, endodontic treatments, existing restorations (amalgam, composite, inlay/onlay), root canal fillings quality, posts
-2. PARODONTAL: Assess marginal bone levels around each tooth, look for horizontal/vertical bone loss, infrabony defects, calculus deposits, furcation involvement, widened periodontal ligament spaces
-3. PROTETIC: Identify missing teeth (edentulous areas), existing prosthetic work (crowns, bridges, implants — assess their fit and condition), areas needing prosthetic rehabilitation
-4. CHIRURGICAL: Look for impacted/semi-impacted teeth, retained roots, cysts, pathological lesions requiring surgical intervention, implant site evaluation
-
-TREATMENT PLAN REQUIREMENTS:
-- Order chronologically (urgent/emergency first, then systematic treatment)
-- Be realistic and follow dental treatment standards
-- Include estimated number of sessions per procedure
-- Provide detailed notes for each step`
 
 export async function POST(request: NextRequest) {
   try {
@@ -107,6 +18,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Lipsesc câmpuri obligatorii' }, { status: 400 })
     }
 
+    // Auth check via cookies
     const authHeader = request.headers.get('cookie')
     const { createServerClient } = await import('@supabase/ssr')
     const supabase = createServerClient(
@@ -129,132 +41,57 @@ export async function POST(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser()
-
     if (!user) {
-      return NextResponse.json({ error: 'Nu ești autentificat' }, { status: 401 })
+      return NextResponse.json({ error: 'Neautorizat' }, { status: 401 })
+    }
+
+    // Get doctor record
+    const { data: doctor } = await supabaseAdmin
+      .from('doctors')
+      .select('id, clinic_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!doctor) {
+      return NextResponse.json({ error: 'Profil medic negăsit' }, { status: 404 })
     }
 
     const mimeType = file_name?.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'
 
-    const models = ['gpt-4o', 'gpt-4o-mini']
-    let completion = null
-    let lastError = null
-
-    for (const model of models) {
-      try {
-        completion = await openai.chat.completions.create({
-          model,
-          messages: [
-            {
-              role: 'system',
-              content: DENTAL_ANALYSIS_PROMPT,
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: `data:${mimeType};base64,${image_base64}`,
-                    detail: 'high',
-                  },
-                },
-                {
-                  type: 'text',
-                  text: `This is a ${xray_type} dental X-ray from a dental clinic. Analyze it thoroughly and provide the complete JSON diagnosis as instructed. Examine every tooth, bone level, existing restorations, and pathology visible on this radiograph. Respond in Romanian.`,
-                },
-              ],
-            },
-          ],
-          max_tokens: 4096,
-          temperature: 0.2,
-          response_format: { type: 'json_object' },
-        })
-        break
-      } catch (e) {
-        lastError = e
-        if (model === models[models.length - 1]) throw e
-      }
-    }
-
-    if (!completion) throw lastError ?? new Error('No AI model available')
-
-    const aiResponse = completion.choices[0]?.message?.content
-    if (!aiResponse) {
-      return NextResponse.json({ error: 'Nu s-a primit răspuns de la AI' }, { status: 500 })
-    }
-
-    let analysis
-    try {
-      let jsonStr = aiResponse
-        .replace(/```json\s*/gi, '')
-        .replace(/```\s*/g, '')
-        .trim()
-
-      // Extract JSON object if surrounded by text
-      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        jsonStr = jsonMatch[0]
-      }
-
-      analysis = JSON.parse(jsonStr)
-    } catch {
-      // Last resort: try to build a minimal valid response from the raw text
-      analysis = {
-        overall_assessment: aiResponse.slice(0, 2000),
-        confidence_score: 0.5,
-        urgency_level: 'normal',
-        odontal_findings: [],
-        parodontal_findings: [],
-        protetic_findings: [],
-        chirurgical_findings: [],
-        treatment_plan: [],
-      }
-    }
-
+    // Create X-ray record
     const { data: xray, error: xrayError } = await supabaseAdmin
-      .from('xray_uploads')
+      .from('xrays')
       .insert({
         patient_id,
-        doctor_id: user.id,
+        doctor_id: doctor.id,
+        clinic_id: doctor.clinic_id,
         file_url,
         file_name: file_name || 'xray.jpg',
-        xray_type: xray_type || 'panoramic',
+        xray_type: xray_type || 'panoramic_opg',
       })
       .select()
       .single()
 
-    if (xrayError) {
-      return NextResponse.json({ error: `Eroare salvare radiografie: ${xrayError.message}` }, { status: 500 })
+    if (xrayError || !xray) {
+      return NextResponse.json(
+        { error: `Eroare salvare radiografie: ${xrayError?.message}` },
+        { status: 500 }
+      )
     }
 
-    const { data: diagnosis, error: diagError } = await supabaseAdmin
-      .from('diagnoses')
-      .insert({
-        xray_id: xray.id,
-        patient_id,
-        doctor_id: user.id,
-        overall_assessment: analysis.overall_assessment,
-        confidence_score: analysis.confidence_score,
-        odontal_findings: analysis.odontal_findings || [],
-        parodontal_findings: analysis.parodontal_findings || [],
-        protetic_findings: analysis.protetic_findings || [],
-        chirurgical_findings: analysis.chirurgical_findings || [],
-        treatment_plan: analysis.treatment_plan || [],
-        urgency_level: analysis.urgency_level || 'normal',
-        raw_ai_response: analysis,
-      })
-      .select()
-      .single()
-
-    if (diagError) {
-      return NextResponse.json({ error: `Eroare salvare diagnostic: ${diagError.message}` }, { status: 500 })
-    }
+    // Run the hybrid AI analysis pipeline
+    const analysisId = await runAnalysisPipeline(
+      xray.id,
+      image_base64,
+      doctor.id,
+      xray_type || 'panoramic_opg',
+      mimeType
+    )
 
     return NextResponse.json({
       success: true,
-      diagnosis_id: diagnosis.id,
-      analysis,
+      analysis_id: analysisId,
+      message: 'Analiza AI a fost finalizată cu succes',
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Eroare server'

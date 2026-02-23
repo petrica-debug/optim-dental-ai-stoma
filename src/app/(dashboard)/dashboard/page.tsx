@@ -8,19 +8,24 @@ import { formatDate } from '@/lib/utils'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [patientsRes, xraysRes, diagnosesRes, recentDiagnosesRes] = await Promise.all([
+  const { data: doctor } = await supabase
+    .from('doctors')
+    .select('id, first_name, last_name, clinic_id')
+    .eq('user_id', user.id)
+    .single()
+
+  if (!doctor) redirect('/login')
+
+  const [patientsRes, xraysRes, analysesRes, recentRes] = await Promise.all([
     supabase.from('patients').select('id', { count: 'exact', head: true }),
-    supabase.from('xray_uploads').select('id', { count: 'exact', head: true }),
-    supabase.from('diagnoses').select('id', { count: 'exact', head: true }),
+    supabase.from('xrays').select('id', { count: 'exact', head: true }),
+    supabase.from('ai_analyses').select('id', { count: 'exact', head: true }),
     supabase
-      .from('diagnoses')
-      .select('*, patients(full_name), xray_uploads(file_name, xray_type)')
+      .from('ai_analyses')
+      .select('id, diagnostic_summary, status, confidence_score, created_at, xrays(xray_type, patients(first_name, last_name))')
       .order('created_at', { ascending: false })
       .limit(5),
   ])
@@ -28,17 +33,17 @@ export default async function DashboardPage() {
   const stats = [
     { label: 'Pacienți', value: patientsRes.count ?? 0, icon: Users, color: 'bg-blue-100 text-blue-600' },
     { label: 'Radiografii', value: xraysRes.count ?? 0, icon: FileImage, color: 'bg-purple-100 text-purple-600' },
-    { label: 'Diagnostice', value: diagnosesRes.count ?? 0, icon: FileText, color: 'bg-green-100 text-green-600' },
+    { label: 'Analize AI', value: analysesRes.count ?? 0, icon: FileText, color: 'bg-green-100 text-green-600' },
   ]
 
-  const recentDiagnoses = recentDiagnosesRes.data ?? []
+  const recentAnalyses = recentRes.data ?? []
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Panou principal</h1>
-          <p className="text-gray-600 mt-1">Bine ai venit în Optim Dental AI</p>
+          <p className="text-gray-600 mt-1">Bine ai venit, Dr. {doctor.first_name} {doctor.last_name}</p>
         </div>
         <Link href="/upload">
           <Button>
@@ -68,55 +73,48 @@ export default async function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Diagnostice recente</CardTitle>
+          <CardTitle>Analize recente</CardTitle>
         </CardHeader>
         <CardContent>
-          {recentDiagnoses.length === 0 ? (
+          {recentAnalyses.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 mb-4">Nu ai niciun diagnostic încă</p>
+              <p className="text-gray-500 mb-4">Nu ai nicio analiză AI încă</p>
               <Link href="/upload">
-                <Button variant="outline">Creează primul diagnostic</Button>
+                <Button variant="outline">Creează prima analiză</Button>
               </Link>
             </div>
           ) : (
             <div className="space-y-3">
-              {recentDiagnoses.map((diagnosis) => (
-                <Link
-                  key={diagnosis.id}
-                  href={`/analysis/${diagnosis.id}`}
-                  className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-                      <Activity className="h-5 w-5 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">
-                        {(diagnosis.patients as { full_name: string })?.full_name ?? 'Pacient'}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {(diagnosis.xray_uploads as { xray_type: string })?.xray_type ?? 'Radiografie'} • {formatDate(diagnosis.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                      diagnosis.urgency_level === 'urgent'
-                        ? 'bg-red-100 text-red-700'
-                        : diagnosis.urgency_level === 'high'
-                          ? 'bg-orange-100 text-orange-700'
-                          : 'bg-green-100 text-green-700'
-                    }`}
+              {recentAnalyses.map((a: any) => {
+                const patient = a.xrays?.patients
+                const patientName = patient ? `${patient.first_name} ${patient.last_name}` : 'Pacient'
+                const xrayType = a.xrays?.xray_type || 'Radiografie'
+                return (
+                  <Link
+                    key={a.id}
+                    href={`/analize/${a.id}`}
+                    className="flex items-center justify-between p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition-colors"
                   >
-                    {diagnosis.urgency_level === 'urgent'
-                      ? 'Urgent'
-                      : diagnosis.urgency_level === 'high'
-                        ? 'Prioritar'
-                        : 'Normal'}
-                  </span>
-                </Link>
-              ))}
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
+                        <Activity className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{patientName}</p>
+                        <p className="text-sm text-gray-500">{xrayType} • {formatDate(a.created_at)}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                      a.status === 'completed' ? 'bg-green-100 text-green-700'
+                      : a.status === 'error' ? 'bg-red-100 text-red-700'
+                      : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {a.status === 'completed' ? 'Finalizat' : a.status === 'error' ? 'Eroare' : 'Procesare'}
+                    </span>
+                  </Link>
+                )
+              })}
             </div>
           )}
         </CardContent>

@@ -20,7 +20,6 @@ export function AddPatientDialog() {
     setLoading(true)
 
     const form = new FormData(e.currentTarget)
-
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -31,9 +30,24 @@ export function AddPatientDialog() {
       return
     }
 
+    // Get doctor record
+    const { data: doctor } = await supabase
+      .from('doctors')
+      .select('id, clinic_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!doctor) {
+      setError('Profil medic negăsit. Reconectează-te.')
+      setLoading(false)
+      return
+    }
+
     const { error } = await supabase.from('patients').insert({
-      doctor_id: user.id,
-      full_name: form.get('full_name') as string,
+      doctor_id: doctor.id,
+      clinic_id: doctor.clinic_id,
+      first_name: form.get('first_name') as string,
+      last_name: form.get('last_name') as string,
       phone: (form.get('phone') as string) || null,
       email: (form.get('email') as string) || null,
       date_of_birth: (form.get('date_of_birth') as string) || null,
@@ -65,7 +79,10 @@ export function AddPatientDialog() {
     <>
       <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setOpen(false)} />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900">Adaugă pacient nou</h2>
             <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -80,11 +97,15 @@ export function AddPatientDialog() {
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Nume complet *
-              </label>
-              <Input name="full_name" placeholder="Ion Popescu" required />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Prenume *</label>
+                <Input name="first_name" placeholder="Ion" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Nume *</label>
+                <Input name="last_name" placeholder="Popescu" required />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -93,9 +114,7 @@ export function AddPatientDialog() {
                 <Input name="phone" placeholder="0712 345 678" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Data nașterii
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Data nașterii</label>
                 <Input name="date_of_birth" type="date" />
               </div>
             </div>
@@ -111,9 +130,7 @@ export function AddPatientDialog() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Note adiționale
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Note</label>
               <textarea
                 name="notes"
                 rows={2}
