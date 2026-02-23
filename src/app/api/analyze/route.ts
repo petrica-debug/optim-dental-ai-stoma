@@ -126,33 +126,47 @@ export async function POST(request: NextRequest) {
 
     const mimeType = file_name?.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg'
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: DENTAL_ANALYSIS_PROMPT,
-        },
-        {
-          role: 'user',
-          content: [
+    const models = ['gpt-4o', 'gpt-4o-mini']
+    let completion = null
+    let lastError = null
+
+    for (const model of models) {
+      try {
+        completion = await openai.chat.completions.create({
+          model,
+          messages: [
             {
-              type: 'text',
-              text: `Analizează această radiografie dentară de tip ${xray_type}. Oferă un diagnostic complet și plan de tratament.`,
+              role: 'system',
+              content: DENTAL_ANALYSIS_PROMPT,
             },
             {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${image_base64}`,
-                detail: 'high',
-              },
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `Analizează această radiografie dentară de tip ${xray_type}. Oferă un diagnostic complet și plan de tratament.`,
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:${mimeType};base64,${image_base64}`,
+                    detail: model === 'gpt-4o' ? 'high' : 'auto',
+                  },
+                },
+              ],
             },
           ],
-        },
-      ],
-      max_tokens: 4096,
-      temperature: 0.3,
-    })
+          max_tokens: 4096,
+          temperature: 0.3,
+        })
+        break
+      } catch (e) {
+        lastError = e
+        if (model === models[models.length - 1]) throw e
+      }
+    }
+
+    if (!completion) throw lastError ?? new Error('No AI model available')
 
     const aiResponse = completion.choices[0]?.message?.content
     if (!aiResponse) {
